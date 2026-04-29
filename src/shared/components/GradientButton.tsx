@@ -9,6 +9,7 @@ type GradientButtonProps = {
   compact?: boolean;
   disabled?: boolean;
   onPress: () => void;
+  solidColor?: string;
   style?: StyleProp<ViewStyle>;
   title: string;
 };
@@ -17,9 +18,16 @@ export function GradientButton({
   compact = false,
   disabled = false,
   onPress,
+  solidColor,
   style,
   title,
 }: GradientButtonProps) {
+  const buttonColors = solidColor
+    ? ([solidColor, solidColor] as const)
+    : disabled
+      ? colors.primaryDisabledGradient
+      : colors.primaryGradient;
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -33,7 +41,7 @@ export function GradientButton({
       ]}
     >
       <LinearGradient
-        colors={disabled ? colors.primaryDisabledGradient : colors.primaryGradient}
+        colors={buttonColors}
         end={{ x: 1, y: 0.5 }}
         start={{ x: 0, y: 0.5 }}
         style={[styles.button, compact ? styles.compactButton : undefined]}
@@ -55,7 +63,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
   },
   compactButton: {
-    minHeight: 44,
+    minHeight: 36,
+    paddingHorizontal: 18,
     borderRadius: radii.pill,
   },
   label: {
@@ -64,7 +73,7 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
   },
   compactLabel: {
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.xs,
   },
   pressed: {
     opacity: 0.92,

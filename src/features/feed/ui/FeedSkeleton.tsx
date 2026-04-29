@@ -40,13 +40,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: colors.skeleton,
   },
   headerLine: {
@@ -58,13 +58,13 @@ const styles = StyleSheet.create({
   },
   cover: {
     width: '100%',
-    aspectRatio: 1.32,
+    aspectRatio: 1,
     backgroundColor: colors.skeletonStrong,
   },
   content: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   line: {
     borderRadius: radii.pill,

@@ -1,28 +1,15 @@
 # Mecenate Feed
 
-Тестовое задание для Mecenate: экран ленты публикаций на `React Native + Expo + TypeScript` c `MobX`, `React Query` и дизайн-токенами.
+Expo + React Native тестовое: лента публикаций, экран поста и комментарии.
 
-## Что реализовано
+## Быстрый просмотр
 
-- лента публикаций с аватаром автора, именем, обложкой, превью текста, лайками и комментариями
-- курсорная пагинация через `useInfiniteQuery`
-- `pull-to-refresh`
-- заглушка для закрытых постов `tier: "paid"`
-- состояния `loading`, `empty`, `error`
-- фильтр `Все / Бесплатные / Платные` через `MobX`
-- запуск в `Expo Go`
-
-## Стек
-
-- `Expo SDK 54`
-- `TypeScript`
-- `MobX`
-- `@tanstack/react-query`
-- `expo-image`, `expo-linear-gradient`, `expo-blur`
+- Лента: пагинация, pull-to-refresh, фильтр `Все / Бесплатные / Платные`, paid-заглушка.
+- Пост: optimistic like, сортировка/ленивая подгрузка/отправка комментариев.
+- Realtime: WebSocket обновляет лайки и новые комментарии.
+- UI-состояния: loading, empty, error, стабильные счетчики, haptic только на действия.
 
 ## Запуск
-
-Поддерживается `Node.js 18+`.
 
 ```bash
 npm install
@@ -30,42 +17,20 @@ cp .env.example .env
 npm run start
 ```
 
-Для запуска на устройствах:
+Для проверки типов:
 
 ```bash
-npm run ios
-npm run android
+npm run typecheck
 ```
 
-## Переменные окружения
-
-Все переменные публичные, потому что это клиент Expo:
-
-- `EXPO_PUBLIC_API_BASE_URL` — базовый URL API
-- `EXPO_PUBLIC_API_TOKEN` — `Bearer`-токен в формате UUID
-- `EXPO_PUBLIC_FEED_SIMULATE_ERROR` — `true/false`, включает серверную ошибку для проверки экрана ошибки
-
-## Проверка
-
-```bash
-npm run check
-```
-
-## Архитектура
+## Где смотреть
 
 ```text
-src/
-  core/
-    providers/        # QueryClient + SafeArea + store providers
-    stores/           # root store context
-  features/feed/
-    api/              # типы и запросы к feed API
-    hooks/            # React Query hooks
-    model/            # MobX store фильтра ленты
-    ui/               # экран и компоненты ленты
-  shared/
-    components/       # переиспользуемые UI-элементы
-    lib/              # форматтеры
-    theme/            # дизайн-токены
-    types/            # глобальные типы окружения
+src/features/feed/api/     запросы и типы API
+src/features/feed/hooks/   React Query хуки
+src/features/feed/model/   кэш ленты/поста/комментариев
+src/features/feed/ui/      экраны и карточки
+src/shared/theme/          цвета, отступы, типографика
 ```
+
+Переменные окружения лежат в `.env.example`; по умолчанию приложение использует тестовый API Mecenate.

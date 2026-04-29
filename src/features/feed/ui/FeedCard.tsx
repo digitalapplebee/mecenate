@@ -1,49 +1,76 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
+import type { GestureResponderEvent } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { GradientButton } from '../../../shared/components/GradientButton';
 import { formatCompactCount } from '../../../shared/lib/formatters';
 import { colors, radii, shadows, spacing, typography } from '../../../shared/theme/tokens';
+import { togglePostLike } from '../api/feedApi';
 import type { Post } from '../api/feed.types';
+import {
+  applyPostLike,
+  postQueryKey,
+  updateCachedPost,
+} from '../model/feedQueryCache';
+import {
+  FEED_REACTION_ICON_SIZE,
+  FEED_REACTION_PILL_GAP,
+  FEED_REACTION_PILL_HORIZONTAL_PADDING,
+  FEED_REACTION_PILL_MIN_WIDTH,
+  FEED_REACTION_PILL_VERTICAL_PADDING,
+  FEED_REACTION_VALUE_MIN_WIDTH,
+} from './feed.constants';
+import type { PostTransitionOrigin } from './postTransition';
 
 type FeedCardProps = {
+  isHidden?: boolean;
+  isOpenDisabled?: boolean;
+  onOpen: (post: Post, origin?: PostTransitionOrigin) => void;
   post: Post;
 };
 
 type StatPillProps = {
   active?: boolean;
+  disabled?: boolean;
   icon: 'comment' | 'heart';
+  onPress?: (event: GestureResponderEvent) => void;
   value: number;
 };
 
-function StatPill({ active = false, icon, value }: StatPillProps) {
+function StatPill({
+  active = false,
+  disabled = false,
+  icon,
+  onPress,
+  value,
+}: StatPillProps) {
   const isHeart = icon === 'heart';
-
-  return (
-    <View
-      style={[
-        styles.statPill,
-        active ? styles.statPillActive : undefined,
-      ]}
-    >
-      {isHeart ? (
-        <Ionicons
-          color={active ? colors.surface : colors.textMuted}
-          name={active ? 'heart' : 'heart-outline'}
-          size={15}
-        />
-      ) : (
-        <Feather
-          color={colors.textMuted}
-          name="message-circle"
-          size={14}
-        />
-      )}
+  const iconColor = active ? colors.surface : colors.textMuted;
+  const pillStyle = [
+    styles.statPill,
+    active ? styles.statPillActive : undefined,
+    disabled ? styles.statPillDisabled : undefined,
+  ];
+  const content = (
+    <>
+      <Ionicons
+        color={iconColor}
+        name={
+          isHeart
+            ? active
+              ? 'heart'
+              : 'heart-outline'
+            : 'chatbubble-outline'
+        }
+        size={FEED_REACTION_ICON_SIZE}
+      />
       <Text
         style={[
           styles.statValue,
@@ -52,21 +79,138 @@ function StatPill({ active = false, icon, value }: StatPillProps) {
       >
         {formatCompactCount(value)}
       </Text>
-    </View>
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={pillStyle}>{content}</View>;
+  }
+
+  return (
+    <Pressable
+      accessibilityLabel={active ? 'Убрать лайк' : 'Поставить лайк'}
+      accessibilityRole="button"
+      accessibilityState={{ checked: active, disabled }}
+      disabled={disabled}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        ...pillStyle,
+        pressed ? styles.statPillPressed : undefined,
+      ]}
+    >
+      {content}
+    </Pressable>
   );
 }
 
-export const FeedCard = memo(function FeedCard({ post }: FeedCardProps) {
+export const FeedCard = memo(function FeedCard({
+  isHidden = false,
+  isOpenDisabled = false,
+  onOpen,
+  post,
+}: FeedCardProps) {
+  const queryClient = useQueryClient();
+  const cardRef = useRef<View>(null);
   const [expanded, setExpanded] = useState(false);
   const isPaidPost = post.tier === 'paid';
   const canExpand =
     !isPaidPost &&
     post.body.trim().length > 0 &&
     post.body.trim() !== post.preview.trim();
-  const bodyText = expanded || !canExpand ? post.body : post.preview;
+  const collapsedBodyText = post.preview.trim().length
+    ? post.preview.trim()
+    : `${post.body.trim().slice(0, 110).trimEnd()}...`;
+  const bodyText =
+    expanded || !canExpand
+      ? post.body.trim()
+      : collapsedBodyText;
+
+  const handleOpen = useCallback(() => {
+    if (isHidden || isOpenDisabled) {
+      return;
+    }
+
+    const node = cardRef.current;
+
+    if (!node) {
+      onOpen(post);
+      return;
+    }
+
+    node.measureInWindow((x, y, width, height) => {
+      onOpen(post, { height, width, x, y });
+    });
+  }, [isHidden, isOpenDisabled, onOpen, post]);
+
+  const toggleLikeMutation = useMutation({
+    mutationFn: () => togglePostLike(post.id),
+    onMutate: async () => {
+      const cachedPost =
+        queryClient.getQueryData<Post>(postQueryKey(post.id)) ?? post;
+      const nextIsLiked = !cachedPost.isLiked;
+      const nextLikesCount = Math.max(
+        0,
+        cachedPost.likesCount + (nextIsLiked ? 1 : -1),
+      );
+
+      applyPostLike(queryClient, post.id, {
+        isLiked: nextIsLiked,
+        likesCount: nextLikesCount,
+      });
+
+      return {
+        previousPost: cachedPost,
+      };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousPost) {
+        updateCachedPost(queryClient, post.id, () => context.previousPost);
+      }
+
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+    onSuccess: (data) => {
+      applyPostLike(queryClient, post.id, data);
+    },
+  });
+
+  const handleLikePress = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation();
+
+      if (toggleLikeMutation.isPending) {
+        return;
+      }
+
+      void Haptics.selectionAsync();
+      toggleLikeMutation.reset();
+      toggleLikeMutation.mutate();
+    },
+    [toggleLikeMutation],
+  );
+
+  const handleExpand = useCallback((event: GestureResponderEvent) => {
+    event.stopPropagation();
+    void Haptics.selectionAsync();
+    setExpanded(true);
+  }, []);
+
+  const handleCollapse = useCallback((event: GestureResponderEvent) => {
+    event.stopPropagation();
+    void Haptics.selectionAsync();
+    setExpanded(false);
+  }, []);
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole="button"
+      disabled={isHidden || isOpenDisabled}
+      onPress={handleOpen}
+      ref={cardRef}
+      style={[styles.card, isHidden ? styles.cardHidden : undefined]}
+      unstable_pressDelay={80}
+    >
       <View style={styles.header}>
         <Image
           contentFit="cover"
@@ -95,7 +239,7 @@ export const FeedCard = memo(function FeedCard({ post }: FeedCardProps) {
           <View style={styles.paywall}>
             <BlurView intensity={28} tint="dark" style={styles.paywallBlur} />
             <LinearGradient
-              colors={['rgba(22, 20, 38, 0.24)', 'rgba(22, 20, 38, 0.72)']}
+              colors={[colors.overlayStart, colors.overlayEnd]}
               style={styles.paywallGradient}
             />
             <View style={styles.paywallContent}>
@@ -106,12 +250,13 @@ export const FeedCard = memo(function FeedCard({ post }: FeedCardProps) {
                 Контент скрыт пользователем.
               </Text>
               <Text style={styles.paywallSubtitle}>
-                Доступ откроется после доната. В демо кнопка неактивна.
+                Доступ откроется после доната
               </Text>
               <GradientButton
                 compact
                 disabled
                 onPress={() => undefined}
+                solidColor={colors.sendButton}
                 title="Отправить донат"
               />
             </View>
@@ -121,7 +266,14 @@ export const FeedCard = memo(function FeedCard({ post }: FeedCardProps) {
 
       <View style={styles.content}>
         {isPaidPost ? (
-          <View style={styles.paidFooterSpacer} />
+          <View>
+            <Text numberOfLines={2} style={styles.title}>
+              {post.title}
+            </Text>
+            <Text numberOfLines={2} style={styles.lockedBody}>
+              Полный текст доступен после доната.
+            </Text>
+          </View>
         ) : (
           <View>
             <Text numberOfLines={2} style={styles.title}>
@@ -130,14 +282,14 @@ export const FeedCard = memo(function FeedCard({ post }: FeedCardProps) {
             <Text style={styles.body}>
               {bodyText}
               {canExpand && !expanded ? (
-                <Text onPress={() => setExpanded(true)} style={styles.expandLink}>
+                <Text onPress={handleExpand} style={styles.expandLink}>
                   {' '}
                   Показать еще
                 </Text>
               ) : null}
             </Text>
             {canExpand && expanded ? (
-              <Pressable hitSlop={8} onPress={() => setExpanded(false)}>
+              <Pressable hitSlop={8} onPress={handleCollapse}>
                 <Text style={styles.collapseLink}>Свернуть</Text>
               </Pressable>
             ) : null}
@@ -145,11 +297,17 @@ export const FeedCard = memo(function FeedCard({ post }: FeedCardProps) {
         )}
 
         <View style={styles.statsRow}>
-          <StatPill active={post.isLiked} icon="heart" value={post.likesCount} />
+          <StatPill
+            active={post.isLiked}
+            disabled={toggleLikeMutation.isPending}
+            icon="heart"
+            onPress={handleLikePress}
+            value={post.likesCount}
+          />
           <StatPill icon="comment" value={post.commentsCount} />
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -160,17 +318,20 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     ...shadows.card,
   },
+  cardHidden: {
+    opacity: 0,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingHorizontal: spacing.sm,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: colors.skeleton,
   },
   headerText: {
@@ -186,13 +347,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: typography.fontSize.xs,
+    lineHeight: 16,
   },
   coverContainer: {
     position: 'relative',
     width: '100%',
-    aspectRatio: 1.32,
+    aspectRatio: 1,
     backgroundColor: colors.skeletonStrong,
   },
   cover: {
@@ -224,7 +385,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
-    backgroundColor: 'rgba(111, 28, 230, 0.88)',
+    backgroundColor: colors.paywallBadge,
   },
   paywallTitle: {
     color: colors.surface,
@@ -243,58 +404,72 @@ const styles = StyleSheet.create({
     opacity: 0.84,
   },
   content: {
-    paddingHorizontal: spacing.md,
-    paddingTop: 12,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   title: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.extraBold,
-    fontSize: 16,
-    lineHeight: 23,
+    fontSize: typography.fontSize.sm,
+    lineHeight: 18,
   },
   body: {
     marginTop: 6,
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: typography.fontSize.xs,
+    lineHeight: 17,
   },
   expandLink: {
     color: colors.primary,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: 14,
+    fontSize: typography.fontSize.xs,
   },
   collapseLink: {
     marginTop: spacing.xs,
     color: colors.primary,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: 14,
+    fontSize: typography.fontSize.xs,
   },
-  paidFooterSpacer: {
-    height: 2,
+  lockedBody: {
+    marginTop: 6,
+    color: colors.textMuted,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: 17,
   },
   statsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
   statPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    gap: FEED_REACTION_PILL_GAP,
+    minWidth: FEED_REACTION_PILL_MIN_WIDTH,
+    paddingHorizontal: FEED_REACTION_PILL_HORIZONTAL_PADDING,
+    paddingVertical: FEED_REACTION_PILL_VERTICAL_PADDING,
     borderRadius: radii.pill,
     backgroundColor: colors.surfaceMuted,
   },
   statPillActive: {
     backgroundColor: colors.like,
   },
+  statPillDisabled: {
+    opacity: 0.75,
+  },
+  statPillPressed: {
+    opacity: 0.9,
+  },
   statValue: {
+    minWidth: FEED_REACTION_VALUE_MIN_WIDTH,
     color: colors.textMuted,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: 13,
+    fontSize: typography.fontSize.xs,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
   },
   statValueActive: {
     color: colors.surface,
