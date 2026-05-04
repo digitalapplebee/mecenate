@@ -17,6 +17,7 @@ type LikePatch = {
   likesCount: number;
 };
 
+const APPLIED_COMMENT_IDS_LIMIT = 500;
 const appliedCommentIds = new Set<string>();
 
 export function applyPostLike(
@@ -35,16 +36,16 @@ export function applyCommentAdded(
   queryClient: QueryClient,
   comment: Comment,
 ) {
+  if (hasCachedComment(queryClient, comment)) {
+    return;
+  }
+
   // Realtime can echo a comment that was already inserted after createComment.
   if (appliedCommentIds.has(comment.id)) {
     return;
   }
 
-  appliedCommentIds.add(comment.id);
-
-  if (hasCachedComment(queryClient, comment)) {
-    return;
-  }
+  rememberAppliedCommentId(comment.id);
 
   queryClient.setQueryData<InfiniteData<CommentsPage>>(
     commentsQueryKey(comment.postId),
@@ -114,4 +115,18 @@ function hasCachedComment(queryClient: QueryClient, comment: Comment) {
       page.comments.some((cachedComment) => cachedComment.id === comment.id),
     ),
   );
+}
+
+function rememberAppliedCommentId(commentId: string) {
+  appliedCommentIds.add(commentId);
+
+  if (appliedCommentIds.size <= APPLIED_COMMENT_IDS_LIMIT) {
+    return;
+  }
+
+  const oldestCommentId = appliedCommentIds.values().next().value;
+
+  if (oldestCommentId) {
+    appliedCommentIds.delete(oldestCommentId);
+  }
 }

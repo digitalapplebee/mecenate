@@ -70,11 +70,13 @@ function buildAuthHeaders() {
 
 export async function fetchFeedPage(
   params: FeedRequestParams,
+  signal?: AbortSignal,
 ): Promise<FeedPage> {
   const response = await fetch(
     `${API_BASE_URL}/posts?${buildFeedQueryString(params)}`,
     {
       headers: buildAuthHeaders(),
+      signal,
     },
   );
 
@@ -97,9 +99,13 @@ export async function fetchFeedPage(
   return payload.data;
 }
 
-export async function fetchPost(postId: string): Promise<Post> {
+export async function fetchPost(
+  postId: string,
+  signal?: AbortSignal,
+): Promise<Post> {
   const response = await fetch(`${API_BASE_URL}/posts/${postId}`, {
     headers: buildAuthHeaders(),
+    signal,
   });
 
   let payload: PostDetailApiResponse | null = null;
@@ -148,11 +154,13 @@ export async function togglePostLike(postId: string) {
 
 export async function fetchCommentsPage(
   params: CommentsRequestParams,
+  signal?: AbortSignal,
 ): Promise<CommentsPage> {
   const response = await fetch(
     `${API_BASE_URL}/posts/${params.postId}/comments?${buildCommentsQueryString(params)}`,
     {
       headers: buildAuthHeaders(),
+      signal,
     },
   );
 

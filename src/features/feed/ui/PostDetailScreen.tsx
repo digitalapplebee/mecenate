@@ -37,15 +37,13 @@ import {
 import { GradientButton } from '../../../shared/components/GradientButton';
 import { formatCompactCount, formatPostDate } from '../../../shared/lib/formatters';
 import { colors, radii, shadows, spacing, typography } from '../../../shared/theme/tokens';
-import { createComment, togglePostLike } from '../api/feedApi';
+import { createComment } from '../api/feedApi';
 import type { Comment, Post } from '../api/feed.types';
 import { usePostCommentsQuery } from '../hooks/usePostCommentsQuery';
 import { usePostQuery } from '../hooks/usePostQuery';
+import { useTogglePostLikeMutation } from '../hooks/useTogglePostLikeMutation';
 import {
   applyCommentAdded,
-  applyPostLike,
-  postQueryKey,
-  updateCachedPost,
 } from '../model/feedQueryCache';
 import { FeedStateCard } from './FeedStateCard';
 import {
@@ -179,37 +177,7 @@ export function PostDetailScreen({
     opacity: transitionProgress.value * 0.1,
   }));
 
-  const toggleLikeMutation = useMutation({
-    mutationFn: () => togglePostLike(post.id),
-    onMutate: async () => {
-      const cachedPost =
-        queryClient.getQueryData<Post>(postQueryKey(post.id)) ?? post;
-      const nextIsLiked = !cachedPost.isLiked;
-      const nextLikesCount = Math.max(
-        0,
-        cachedPost.likesCount + (nextIsLiked ? 1 : -1),
-      );
-
-      applyPostLike(queryClient, post.id, {
-        isLiked: nextIsLiked,
-        likesCount: nextLikesCount,
-      });
-
-      return {
-        previousPost: cachedPost,
-      };
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.previousPost) {
-        updateCachedPost(queryClient, post.id, () => context.previousPost);
-      }
-
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    },
-    onSuccess: (data) => {
-      applyPostLike(queryClient, post.id, data);
-    },
-  });
+  const toggleLikeMutation = useTogglePostLikeMutation(post);
 
   const createCommentMutation = useMutation({
     mutationFn: (text: string) => createComment(post.id, text),
@@ -239,7 +207,11 @@ export function PostDetailScreen({
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     toggleLikeMutation.reset();
-    toggleLikeMutation.mutate();
+    toggleLikeMutation.mutate(undefined, {
+      onError: () => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      },
+    });
   }, [post.tier, toggleLikeMutation]);
 
   const handleLoadMoreComments = useCallback(() => {

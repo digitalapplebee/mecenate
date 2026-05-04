@@ -3,7 +3,6 @@ import type { GestureResponderEvent } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
@@ -12,13 +11,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GradientButton } from '../../../shared/components/GradientButton';
 import { formatCompactCount } from '../../../shared/lib/formatters';
 import { colors, radii, shadows, spacing, typography } from '../../../shared/theme/tokens';
-import { togglePostLike } from '../api/feedApi';
 import type { Post } from '../api/feed.types';
-import {
-  applyPostLike,
-  postQueryKey,
-  updateCachedPost,
-} from '../model/feedQueryCache';
+import { useTogglePostLikeMutation } from '../hooks/useTogglePostLikeMutation';
 import {
   FEED_REACTION_ICON_SIZE,
   FEED_REACTION_PILL_GAP,
@@ -110,7 +104,6 @@ export const FeedCard = memo(function FeedCard({
   onOpen,
   post,
 }: FeedCardProps) {
-  const queryClient = useQueryClient();
   const cardRef = useRef<View>(null);
   const [expanded, setExpanded] = useState(false);
   const isPaidPost = post.tier === 'paid';
@@ -143,37 +136,7 @@ export const FeedCard = memo(function FeedCard({
     });
   }, [isHidden, isOpenDisabled, onOpen, post]);
 
-  const toggleLikeMutation = useMutation({
-    mutationFn: () => togglePostLike(post.id),
-    onMutate: async () => {
-      const cachedPost =
-        queryClient.getQueryData<Post>(postQueryKey(post.id)) ?? post;
-      const nextIsLiked = !cachedPost.isLiked;
-      const nextLikesCount = Math.max(
-        0,
-        cachedPost.likesCount + (nextIsLiked ? 1 : -1),
-      );
-
-      applyPostLike(queryClient, post.id, {
-        isLiked: nextIsLiked,
-        likesCount: nextLikesCount,
-      });
-
-      return {
-        previousPost: cachedPost,
-      };
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.previousPost) {
-        updateCachedPost(queryClient, post.id, () => context.previousPost);
-      }
-
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    },
-    onSuccess: (data) => {
-      applyPostLike(queryClient, post.id, data);
-    },
-  });
+  const toggleLikeMutation = useTogglePostLikeMutation(post);
 
   const handleLikePress = useCallback(
     (event: GestureResponderEvent) => {
@@ -185,7 +148,11 @@ export const FeedCard = memo(function FeedCard({
 
       void Haptics.selectionAsync();
       toggleLikeMutation.reset();
-      toggleLikeMutation.mutate();
+      toggleLikeMutation.mutate(undefined, {
+        onError: () => {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        },
+      });
     },
     [toggleLikeMutation],
   );

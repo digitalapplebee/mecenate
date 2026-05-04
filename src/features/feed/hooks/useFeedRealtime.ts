@@ -10,6 +10,7 @@ import {
 import { applyCommentAdded, applyPostLike } from '../model/feedQueryCache';
 
 const RECONNECT_DELAY_MS = 3_000;
+const MAX_RECONNECT_DELAY_MS = 30_000;
 
 export function useFeedRealtime(): FeedRealtimeStatus {
   const queryClient = useQueryClient();
@@ -28,6 +29,7 @@ export function useFeedRealtime(): FeedRealtimeStatus {
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let closedByCleanup = false;
+    let reconnectAttempt = 0;
 
     const connect = () => {
       setStatus('connecting');
@@ -36,6 +38,7 @@ export function useFeedRealtime(): FeedRealtimeStatus {
       socket = nextSocket;
 
       nextSocket.onopen = () => {
+        reconnectAttempt = 0;
         setStatus('connected');
       };
 
@@ -70,7 +73,12 @@ export function useFeedRealtime(): FeedRealtimeStatus {
         }
 
         setStatus('error');
-        reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+        const reconnectDelay = Math.min(
+          MAX_RECONNECT_DELAY_MS,
+          RECONNECT_DELAY_MS * 2 ** reconnectAttempt,
+        );
+        reconnectAttempt += 1;
+        reconnectTimer = setTimeout(connect, reconnectDelay);
       };
     };
 

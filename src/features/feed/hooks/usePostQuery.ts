@@ -7,7 +7,7 @@ import { postQueryKey } from '../model/feedQueryCache';
 export function usePostQuery(postId: string, initialPost?: Post) {
   return useQuery({
     queryKey: postQueryKey(postId),
-    queryFn: () => fetchPost(postId),
+    queryFn: ({ signal }) => fetchPost(postId, signal),
     placeholderData: initialPost,
   });
 }

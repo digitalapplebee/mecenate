@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
 import * as Haptics from 'expo-haptics';
@@ -48,7 +48,10 @@ export const FeedScreen = observer(function FeedScreen({
   const [isManualRefreshing, setManualRefreshing] = useState(false);
   const query = useFeedQuery(feedFiltersStore.apiTier);
   useFeedRealtime();
-  const posts = query.data?.pages.flatMap((page) => page.posts) ?? [];
+  const posts = useMemo(
+    () => query.data?.pages.flatMap((page) => page.posts) ?? [],
+    [query.data],
+  );
 
   const isInitialLoading = query.isPending;
   const showInitialError = query.isError && posts.length === 0;
@@ -92,20 +95,20 @@ export const FeedScreen = observer(function FeedScreen({
     });
   }, [query]);
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (!query.hasNextPage || query.isFetchingNextPage) {
       return;
     }
 
     void query.fetchNextPage();
-  };
+  }, [query]);
 
-  const handleEmptyAction = () => {
+  const handleEmptyAction = useCallback(() => {
     feedFiltersStore.reset();
     listRef.current?.scrollToOffset({ animated: true, offset: 0 });
-  };
+  }, [feedFiltersStore]);
 
-  const handleFilterChange = (nextTier: FeedTierFilter) => {
+  const handleFilterChange = useCallback((nextTier: FeedTierFilter) => {
     if (nextTier === feedFiltersStore.tier) {
       return;
     }
@@ -113,7 +116,7 @@ export const FeedScreen = observer(function FeedScreen({
     void Haptics.selectionAsync();
     feedFiltersStore.setTier(nextTier);
     listRef.current?.scrollToOffset({ animated: true, offset: 0 });
-  };
+  }, [feedFiltersStore]);
 
   const handleOpenPost = useCallback(
     (post: Post, origin?: PostTransitionOrigin) => {

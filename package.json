@@ -8,8 +8,9 @@
     "ios": "node -r ./scripts/node18-polyfills.cjs ./node_modules/expo/bin/cli start --ios",
     "web": "node -r ./scripts/node18-polyfills.cjs ./node_modules/expo/bin/cli start --web",
     "typecheck": "tsc --noEmit",
+    "test": "rm -rf .test-build && tsc -p tsconfig.test.json && node --test tests/*.test.cjs",
     "doctor": "npx expo-doctor",
-    "check": "npm run typecheck && npm run doctor"
+    "check": "npm run typecheck && npm run test && npm run doctor"
   },
   "dependencies": {
     "@expo-google-fonts/manrope": "^0.4.2",

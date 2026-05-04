@@ -9,12 +9,15 @@ export function useFeedQuery(tier?: FeedTier) {
   return useInfiniteQuery({
     queryKey: ['feed', tier ?? 'all'],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      fetchFeedPage({
-        limit: PAGE_SIZE,
-        cursor: pageParam,
-        tier,
-      }),
+    queryFn: ({ pageParam, signal }) =>
+      fetchFeedPage(
+        {
+          limit: PAGE_SIZE,
+          cursor: pageParam,
+          tier,
+        },
+        signal,
+      ),
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
   });

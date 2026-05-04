@@ -10,12 +10,15 @@ export function usePostCommentsQuery(postId: string, enabled = true) {
     enabled,
     queryKey: commentsQueryKey(postId),
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      fetchCommentsPage({
-        cursor: pageParam,
-        limit: COMMENTS_PAGE_SIZE,
-        postId,
-      }),
+    queryFn: ({ pageParam, signal }) =>
+      fetchCommentsPage(
+        {
+          cursor: pageParam,
+          limit: COMMENTS_PAGE_SIZE,
+          postId,
+        },
+        signal,
+      ),
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,
   });

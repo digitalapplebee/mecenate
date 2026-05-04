@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "noEmit": false,
+    "outDir": ".test-build",
+    "target": "ES2022"
+  },
+  "include": [
+    "src/features/feed/api/feed.types.ts",
+    "src/features/feed/api/feedApi.ts",
+    "src/features/feed/api/feedRealtime.ts",
+    "src/features/feed/model/feedQueryCache.ts",
+    "src/shared/lib/formatters.ts"
+  ]
+}
